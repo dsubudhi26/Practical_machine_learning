@@ -1,0 +1,116 @@
+Practical Machine Learning 
+=============================================
+
+#Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.I need to create a report describing how I built my model, how I used cross validation, what I think the expected out of sample error is, and why I made the choices you did. I will also use your prediction model to predict 20 different test cases.
+
+#Analysis
+## Approach 
+I am going to take following approach:
+1. Load the data and understanding basic charateristics of data
+2.I will use cross validation to build a model. 70% of training data will be used for subtraining data and 30% of training data will be used for subtesting data
+3. I will understand the relationshp among variables and use Principal component Analysis to reduce the number of variables
+4. I will use both decision tree and random forest models.
+5. I will use both the models to find accuracy of both models  on the subtesting dataset and then choose the best model 
+6. Finally I will apply the best model on the actual test data set
+
+##Loading the data
+I will load the data and packages, which I am going to use. I will also set the seed so that it can be reproducible
+```{r}
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+set.seed(1234)
+#Read the csv file and convert all #Div/0 to NA
+training_set <- read.csv("pml-training.csv",na.strings=c("NA","#DIV/0!", "")) 
+testing_set <- read.csv("pml-testing.csv",na.strings=c("NA","#DIV/0!", ""))
+head(training_set)
+str(training_set)
+```
+
+##Cleaning of data
+As we can see that there are a lot of variables for which all the values are "NA"" , so we need to nremove those variables from our dataset.
+```{r}
+training_set<-training_set[,colSums(is.na(training_set)) == 0]
+testing_set<-testing_set[,colSums(is.na(testing_set)) == 0]
+str(training_set)
+```
+Now we can see that the total number of variables necessary for us reduces from 160 to 60. We need to remove the variables  X,user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window as they can't be used for prediction
+```{r}
+remove <- grep("name|timestamp|window|X", colnames(training_set), value=F) 
+training_set <- training_set[,-remove]
+testing_set <- testing_set[,-remove]
+dim(training_set)
+dim(testing_set)
+```
+##Crossvalidation
+Now, we need to partition the training set into subtraining (70%) and subtesting(30%) data. This is to perform crossvalidation
+```{r}
+partition_data <- createDataPartition(y=training_set$classe, p=0.7, list=FALSE)
+sub_training <- training_set[partition_data, ] 
+sub_testing <- training_set[-partition_data, ]
+dim(sub_training)
+dim(sub_testing)
+```
+
+We can see that subtraining set has 13737 observations with 53 variables and subtesting set has 5885 observations with variables
+
+##Bar Plot
+As we know that the variable classe has 5 levels: A, B,C,D,E , let's take a look at the frequency of each levels in subtraining data set
+```{r}
+plot(sub_training$classe, col="grey", main=" Plot of levels of the variable classe in the subtraining data set", xlab="classe levels", ylab="Frequency")
+```
+
+So, we can clearly see that A has highest observations while D has lowest observations.
+
+## Prediction with Decison Tree
+Lets's first use decision tree model to model our data
+```{r}
+model1 <- rpart(classe ~ ., data=sub_training, method="class")
+
+prediction1 <- predict(model1, sub_testing, type = "class")
+
+# Plot the Decision Tree
+rpart.plot(model1, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+```
+Let's have a look at confusion matrix
+```{r}
+confusionMatrix(prediction1, sub_testing$classe)
+```
+
+
+
+
+##PCA
+As we can see that number of variables are still over 50, let's use PCA to reduce some variables
+
+
+```{r}
+preProc <- preProcess(sub_training[, 1:52], method="pca",thresh=.95)
+trainPC <- predict(preProc,sub_training[,1:52])
+
+```
+
+##Prediction with Random Forest
+Let's use Random Forest model 
+```{r}
+
+modFitRF <- randomForest(sub_training$classe ~ .,   data=trainPC)
+print(modFitRF)
+testPC <- predict(preProc, sub_testing[,1:52])
+
+confusionMatrix(sub_testing$classe, predict(modFitRF, testPC))
+```
+
+As we can see that accuracy for random forest is 0.9788 , which is much higher than the accuracy for decision tree ,which is 0.6879. So, we will select the random forest model to predict the final test data
+
+##Predicting final data
+Now once we have zeroed in on the model , let's predict the final data
+```{r}
+testPC_final <- predict(preProc, testing_set[,1:52])
+predict_final <- predict(modFitRF,testPC_final )
+predict_final
+```
